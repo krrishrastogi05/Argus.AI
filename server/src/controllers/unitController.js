@@ -18,19 +18,22 @@ async function deployUnit(req, res, next) {
   try {
     const { incidentId, unitId } = req.body;
 
+    // Mark the unit BUSY first so the populated incident below reflects its real status.
+    await ForceUnit.findByIdAndUpdate(unitId, { status: 'BUSY' });
+
     const incident = await Incident.findByIdAndUpdate(
       incidentId,
       { status: 'DISPATCHED', assignedUnit: unitId },
       { new: true },
     ).populate('assignedUnit');
 
-    await ForceUnit.findByIdAndUpdate(unitId, { status: 'BUSY' });
-
     const incidents = await Incident.find().populate('assignedUnit').sort({ timestamp: -1 });
     const units = await ForceUnit.find();
 
-    emitIncidentAlert({ incidents, units, newIncident: incident });
-    return res.json({ success: true });
+    // newIncident is null here (not an actual new incident) so deploying doesn't
+    // re-trigger the "new incident" toast/flash for an incident that already existed.
+    emitIncidentAlert({ incidents, units, newIncident: null });
+    return res.json({ success: true, incident });
   } catch (err) {
     return next(err);
   }

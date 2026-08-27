@@ -32,6 +32,24 @@ async function createIncident(req, res, next) {
   }
 }
 
+async function removeIncident(req, res, next) {
+  try {
+    const incident = await Incident.findByIdAndDelete(req.params.id);
+
+    if (incident?.assignedUnit) {
+      await ForceUnit.findByIdAndUpdate(incident.assignedUnit, { status: 'IDLE' });
+    }
+
+    const incidents = await Incident.find().populate('assignedUnit').sort({ timestamp: -1 });
+    const units = await ForceUnit.find();
+
+    emitIncidentAlert({ incidents, units, newIncident: null });
+    return res.json({ success: true });
+  } catch (err) {
+    return next(err);
+  }
+}
+
 async function clearSystem(req, res, next) {
   try {
     const clientKey = req.headers['x-admin-key'];
@@ -61,4 +79,4 @@ async function clearSystem(req, res, next) {
   }
 }
 
-module.exports = { clearSystem, createIncident };
+module.exports = { clearSystem, createIncident, removeIncident };
