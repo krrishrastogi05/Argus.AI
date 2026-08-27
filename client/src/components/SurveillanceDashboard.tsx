@@ -167,12 +167,24 @@ export default function SurveillanceDashboard() {
 
   const handleDeploy = async (unitId: string) => {
     if (!selectedIncident) return;
-    await fetch(`${API_URL}/api/deploy`, {
+    const res = await fetch(`${API_URL}/api/deploy`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ incidentId: selectedIncident._id, unitId })
     });
-    setSuggestedUnits([]); 
+    const data = await res.json();
+    setSelectedIncident(data.incident);
+    setSuggestedUnits([]);
+  };
+
+  const handleRemoveIncident = async () => {
+    if (!selectedIncident) return;
+    if (!confirm(`Remove this ${selectedIncident.type || 'incident'}?`)) return;
+
+    await fetch(`${API_URL}/api/incident/${selectedIncident._id}`, { method: 'DELETE' });
+    setSelectedIncident(null);
+    setSuggestedUnits([]);
+    setIsPanelOpen(false);
   };
 
   useEffect(() => {
@@ -186,6 +198,12 @@ export default function SurveillanceDashboard() {
     socket.on("incident_alert", (data) => {
       setIncidents(data.incidents);
       setUnits(data.units);
+
+      // Keep the open panel in sync (e.g. dispatched/removed from another tab)
+      // instead of showing a stale copy of the incident.
+      setSelectedIncident((prev: any) =>
+        prev ? data.incidents.find((inc: any) => inc._id === prev._id) || null : prev
+      );
 
       if (data.newIncident) {
         setIncomingAlert(data.newIncident);
@@ -349,6 +367,7 @@ export default function SurveillanceDashboard() {
           {selectedIncident && (
              <div className="flex gap-2">
                 <button onClick={() => focusOnIncident(selectedIncident)} className="text-[10px] bg-cyan-900/30 text-cyan-400 px-2 py-1 rounded border border-cyan-800 hover:bg-cyan-800/50 transition">RE-FOCUS</button>
+                <button onClick={handleRemoveIncident} className="text-[10px] bg-red-900/30 text-red-400 px-2 py-1 rounded border border-red-800 hover:bg-red-800/50 transition flex items-center gap-1"><Trash2 className="w-3 h-3" />REMOVE</button>
                 <button onClick={() => setIsPanelOpen(false)} className="md:hidden text-[10px] bg-slate-800 text-slate-400 px-2 py-1 rounded border border-slate-700">HIDE</button>
              </div>
           )}
