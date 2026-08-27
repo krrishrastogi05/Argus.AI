@@ -13,6 +13,7 @@ import SystemStatusSidebar from './SystemStatusSidebar';
 
 // --- ENV VAR HANDLING ---
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+const CARTO_KEY = import.meta.env.VITE_CARTO_API_KEY;
 const socket = getSocket();
 
 // --- ICONS ---
@@ -276,7 +277,7 @@ export default function SurveillanceDashboard() {
       {/* MAP AREA */}
       <div className="flex-1 relative h-full w-full">
         <MapContainer center={DEFAULT_VIEW} zoom={11} style={{ height: '100%', width: '100%' }} zoomControl={false}>
-          <TileLayer url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png" attribution="© OpenStreetMap" />
+          <TileLayer url={`https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png${CARTO_KEY ? `?key=${CARTO_KEY}` : ''}`} attribution="© OpenStreetMap, © CARTO" />
           <MapController center={mapCenter} zoom={mapZoom} shouldFly={shouldFly} />
           
           {incidents.map((inc) => {

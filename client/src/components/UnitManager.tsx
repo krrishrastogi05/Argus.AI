@@ -13,6 +13,8 @@ import { Flame, Stethoscope, Siren, Map as MapIcon } from "lucide-react"; // Rem
 import "leaflet/dist/leaflet.css";
 import { API_URL } from "../services/gemini";
 
+const CARTO_KEY = import.meta.env.VITE_CARTO_API_KEY;
+
 // ... (Keep existing Icons: policeIcon, fireIcon, medicalIcon) ...
 const policeIcon = new L.DivIcon({
   className: "bg-transparent",
@@ -164,8 +166,8 @@ export default function UnitManager() {
           zoomControl={false}
         >
           <TileLayer
-            url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
-            attribution="© OpenStreetMap"
+            url={`https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png${CARTO_KEY ? `?key=${CARTO_KEY}` : ''}`}
+            attribution="© OpenStreetMap, © CARTO"
           />
           <ClickHandler onMapClick={handleAddUnit} />
           {units.map((unit) => (
