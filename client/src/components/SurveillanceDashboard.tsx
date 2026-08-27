@@ -79,9 +79,10 @@ export default function SurveillanceDashboard() {
   const [mapCenter, setMapCenter] = useState<[number, number] | null>(null);
   const [mapZoom, setMapZoom] = useState(11);
   const [shouldFly, setShouldFly] = useState(false);
-  const [flash, setFlash] = useState(false);
   const [advisoryStatus, setAdvisoryStatus] = useState('');
   const [incomingAlert, setIncomingAlert] = useState<any | null>(null);
+  // Stays up (popup + flash) until the operator dismisses it - no auto-timeout.
+  const flash = !!incomingAlert && incomingAlert.severity > 7;
 
   const [isPanelOpen, setIsPanelOpen] = useState(false);
   
@@ -208,12 +209,6 @@ export default function SurveillanceDashboard() {
 
       if (data.newIncident) {
         setIncomingAlert(data.newIncident);
-        setTimeout(() => setIncomingAlert(null), 9000);
-
-        if (data.newIncident.severity > 7) {
-          setFlash(true);
-          setTimeout(() => setFlash(false), 800);
-        }
       }
     });
 
@@ -227,7 +222,7 @@ export default function SurveillanceDashboard() {
 
   return (
     <div className="flex flex-col md:flex-row h-full bg-slate-950 text-slate-200 relative overflow-hidden">
-      <div className={`absolute inset-0 bg-red-500/20 z-[9999] pointer-events-none transition-opacity duration-500 ${flash ? 'opacity-100' : 'opacity-0'}`} />
+      <div className={`absolute inset-0 bg-red-500/20 z-[9999] pointer-events-none transition-opacity duration-500 ${flash ? 'opacity-100 animate-pulse' : 'opacity-0'}`} />
       {incomingAlert && (
         <div className="absolute top-20 left-1/2 z-[3000] w-[calc(100%-2rem)] max-w-md -translate-x-1/2 animate-in slide-in-from-top-4 duration-300 md:top-6">
           <div className="border border-red-500/70 bg-slate-950/95 shadow-[0_0_40px_rgba(239,68,68,0.25)] backdrop-blur rounded p-4">
