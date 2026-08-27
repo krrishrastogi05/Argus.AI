@@ -15,8 +15,12 @@ export default function HelplineSimulator() {
 
       newRecorder.ondataavailable = (e) => chunks.push(e.data);
       newRecorder.onstop = async () => {
-        const blob = new Blob(chunks, { type: "audio/mp3" });
-        const file = new File([blob], "call.mp3", { type: "audio/mp3" });
+        // No browser has a native MP3 encoder - MediaRecorder actually records
+        // whatever it reports via .mimeType (webm/opus in Chrome & Firefox).
+        // Mislabeling it as audio/mp3 sent bytes Gemini couldn't parse.
+        const mimeType = (newRecorder.mimeType || "audio/webm").split(";")[0];
+        const blob = new Blob(chunks, { type: mimeType });
+        const file = new File([blob], "call.webm", { type: mimeType });
         processCall(file);
       };
 
