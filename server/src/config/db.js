@@ -2,13 +2,11 @@ const mongoose = require('mongoose');
 
 const { env } = require('./env');
 
-async function connectDatabase() {
-  try {
-    await mongoose.connect(env.mongoUri);
-    console.log('MongoDB connected');
-  } catch (err) {
-    console.error('MongoDB connection error:', err.message);
-  }
+// Transactions need a replica set (Atlas always is one). Locally, start mongod
+// with --replSet rs0 and run rs.initiate() once.
+async function connectDatabase(uri = env.mongoUri) {
+  await mongoose.connect(uri);
+  console.log('MongoDB connected');
 }
 
 module.exports = { connectDatabase };

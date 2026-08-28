@@ -1,19 +1,32 @@
-const { env } = require('../config/env');
+const mongoose = require('mongoose');
+
+const { HttpError } = require('../utils/httpError');
 
 function notFoundHandler(req, res) {
   res.status(404).json({ error: 'Route not found' });
 }
 
+// eslint-disable-next-line no-unused-vars
 function errorHandler(err, req, res, next) {
-  const statusCode = err.statusCode || 500;
-  const publicMessage = err.publicMessage || err.message || 'Internal Server Error';
+  if (err instanceof HttpError) {
+    return res.status(err.status).json({ error: err.message });
+  }
+
+  if (err instanceof mongoose.Error.CastError) {
+    return res.status(400).json({ error: `Invalid ${err.path === '_id' ? 'id' : err.path}` });
+  }
+
+  if (err instanceof mongoose.Error.ValidationError) {
+    return res.status(400).json({ error: err.message });
+  }
+
+  // body-parser errors (bad JSON, payload too large) carry their own status.
+  if (err.type && err.status) {
+    return res.status(err.status).json({ error: err.message });
+  }
 
   console.error(err);
-
-  res.status(statusCode).json({
-    error: publicMessage,
-    ...(env.nodeEnv !== 'production' ? { details: err.message } : {}),
-  });
+  return res.status(500).json({ error: 'Internal Server Error' });
 }
 
 module.exports = { errorHandler, notFoundHandler };
