@@ -1,42 +1,32 @@
-const ForceUnit = require('../../models/ForceUnit');
-const Incident = require('../../models/Incident');
-const { emitIncidentAlert, emitUnitsUpdated } = require('../services/realtimeService');
+const { z } = require('zod');
 
-async function createUnit(req, res, next) {
+const ForceUnit = require('../models/ForceUnit');
+const { UNIT_TYPES } = require('../models/enums');
+const { publish } = require('../realtime/socket');
+const { HttpError } = require('../utils/httpError');
+
+const createUnitSchema = z.object({
+  name: z.string().trim().min(1).max(30),
+  type: z.enum(UNIT_TYPES),
+  coordinates: z.tuple([z.number().min(-90).max(90), z.number().min(-180).max(180)]),
+});
+
+async function listUnits(req, res) {
+  const units = await ForceUnit.find().sort({ name: 1 });
+  res.json({ units });
+}
+
+async function createUnit(req, res) {
+  const { name, type, coordinates } = req.body;
+
   try {
-    const unit = await ForceUnit.create(req.body);
-    const units = await ForceUnit.find();
-
-    emitUnitsUpdated(units);
-    return res.json(unit);
+    const unit = await ForceUnit.create({ name, type, location: ForceUnit.toPoint(coordinates) });
+    publish.unitUpdated(unit);
+    res.status(201).json({ unit });
   } catch (err) {
-    return next(err);
+    if (err.code === 11000) throw new HttpError(409, `A unit named ${name} already exists`);
+    throw err;
   }
 }
 
-async function deployUnit(req, res, next) {
-  try {
-    const { incidentId, unitId } = req.body;
-
-    // Mark the unit BUSY first so the populated incident below reflects its real status.
-    await ForceUnit.findByIdAndUpdate(unitId, { status: 'BUSY' });
-
-    const incident = await Incident.findByIdAndUpdate(
-      incidentId,
-      { status: 'DISPATCHED', assignedUnit: unitId },
-      { new: true },
-    ).populate('assignedUnit');
-
-    const incidents = await Incident.find().populate('assignedUnit').sort({ timestamp: -1 });
-    const units = await ForceUnit.find();
-
-    // newIncident is null here (not an actual new incident) so deploying doesn't
-    // re-trigger the "new incident" toast/flash for an incident that already existed.
-    emitIncidentAlert({ incidents, units, newIncident: null });
-    return res.json({ success: true, incident });
-  } catch (err) {
-    return next(err);
-  }
-}
-
-module.exports = { createUnit, deployUnit };
+module.exports = { createUnit, createUnitSchema, listUnits };
