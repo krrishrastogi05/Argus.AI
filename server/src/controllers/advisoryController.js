@@ -1,16 +1,43 @@
-const Advisory = require('../../models/Advisory');
-const { emitAdvisoryPosted } = require('../services/realtimeService');
+const { z } = require('zod');
 
-async function createAdvisory(req, res, next) {
-  try {
-    const { message } = req.body;
-    const advisory = await Advisory.create({ message });
+const Advisory = require('../models/Advisory');
+const Incident = require('../models/Incident');
+const { runTask } = require('../ai/harness');
+const advisoryDraft = require('../ai/tasks/advisoryDraft');
+const { publish } = require('../realtime/socket');
+const { objectId } = require('../middleware/validate');
+const { HttpError } = require('../utils/httpError');
 
-    emitAdvisoryPosted(advisory);
-    return res.json({ success: true, advisory });
-  } catch (err) {
-    return next(err);
-  }
+const draftSchema = z.object({ incidentId: objectId });
+
+const publishSchema = z.object({
+  message: z.string().trim().min(1).max(advisoryDraft.MAX_LENGTH),
+  incidentId: objectId.optional(),
+});
+
+async function listAdvisories(req, res) {
+  const advisories = await Advisory.find().sort({ createdAt: -1 }).limit(50);
+  res.json({ advisories });
 }
 
-module.exports = { createAdvisory };
+// Step 1 (admin): the AI drafts. Nothing is public yet - a human reviews first.
+async function draftAdvisory(req, res) {
+  const incident = await Incident.findById(req.body.incidentId);
+  if (!incident) throw new HttpError(404, 'Incident not found');
+
+  const { output, meta } = await runTask(advisoryDraft, { incident });
+  res.json({ text: output, source: meta.source });
+}
+
+// Step 2 (admin): publish the reviewed text to every connected user.
+async function publishAdvisory(req, res) {
+  const advisory = await Advisory.create({
+    message: req.body.message,
+    relatedIncidentId: req.body.incidentId,
+  });
+
+  publish.advisoryPublished(advisory);
+  res.status(201).json({ advisory });
+}
+
+module.exports = { draftAdvisory, draftSchema, listAdvisories, publishAdvisory, publishSchema };
