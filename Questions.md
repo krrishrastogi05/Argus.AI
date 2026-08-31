@@ -1,3 +1,5 @@
+> **Note:** The backend changed after this sheet was written (auth + RBAC, `/api/reports` replaces `/api/analyze` + `/api/incident`, transactional dispatch, AI harness, delta sockets). Answers about the old endpoints are out of date. See [docs/INTERVIEW_NOTES.md](docs/INTERVIEW_NOTES.md).
+
 Worked for 22s
 
 Below is your Argus.AI interview preparation sheet in question–answer format. Use this like a speaking script.
