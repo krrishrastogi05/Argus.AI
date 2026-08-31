@@ -38,7 +38,11 @@ function ClickHandler({
   onMapClick: (lat: number, lng: number) => void;
 }) {
   useMapEvents({
-    click: (e: L.LeafletMouseEvent) => onMapClick(e.latlng.lat, e.latlng.lng),
+    // wrap(): after panning across the date line Leaflet reports lng like -434; bring it into -180..180.
+    click: (e: L.LeafletMouseEvent) => {
+      const { lat, lng } = e.latlng.wrap();
+      onMapClick(lat, lng);
+    },
   });
   return null;
 }
