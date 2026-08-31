@@ -1,8 +1,7 @@
 const { ipKeyGenerator, rateLimit } = require('express-rate-limit');
 
-// Signed-in traffic is limited per account (fair behind shared NATs/offices);
-// anonymous traffic falls back to per-IP.
-// Trade-off: in-memory store, counts are per instance. Swap in rate-limit-redis when running >1 instance.
+// Per user when signed in (one office can share one IP), else per IP.
+// ponytail: in-memory counts are per instance. Use rate-limit-redis for more than one instance.
 const keyByUserOrIp = (req) => (req.user ? `user:${req.user.id}` : ipKeyGenerator(req.ip));
 
 function limiter(windowMinutes, max, message) {
@@ -18,10 +17,10 @@ function limiter(windowMinutes, max, message) {
 
 const apiLimiter = limiter(15, 300, 'Too many requests. Please try again shortly.');
 
-// Brute-force protection on login/register.
+// Stops password guessing.
 const authLimiter = limiter(15, 20, 'Too many sign-in attempts. Please wait 15 minutes.');
 
-// AI calls are expensive and can trigger provider quota exhaustion, so they get a tighter budget.
+// AI calls cost money and use provider quota.
 const aiLimiter = limiter(30, 10, 'Too many AI requests. Please wait 30 minutes.');
 
 module.exports = { aiLimiter, apiLimiter, authLimiter };

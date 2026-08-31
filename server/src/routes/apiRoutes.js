@@ -7,27 +7,27 @@ const incidents = require('../controllers/incidentController');
 const units = require('../controllers/unitController');
 const { ROLES } = require('../models/enums');
 const { requireAuth, requireRole } = require('../middleware/auth');
-const { aiLimiter, authLimiter } = require('../middleware/rateLimiters');
+const { aiLimiter, apiLimiter, authLimiter } = require('../middleware/rateLimiters');
 const { validateBody } = require('../middleware/validate');
 
 const router = express.Router();
 const citizenOnly = requireRole(ROLES.CITIZEN);
 const adminOnly = requireRole(ROLES.ADMIN);
 
-// --- Public ---------------------------------------------------------------
+// Public
 router.post('/auth/register', authLimiter, validateBody(auth.registerSchema), auth.register);
 router.post('/auth/login', authLimiter, validateBody(auth.loginSchema), auth.login);
 
-// --- Any signed-in user ----------------------------------------------------
-router.use(requireAuth);
+// Any signed-in user. The limiter comes after requireAuth, so it counts per user.
+router.use(requireAuth, apiLimiter);
 router.get('/auth/me', auth.me);
 router.get('/advisories', advisories.listAdvisories);
 
-// --- Citizen (social feed + helpline) --------------------------------------
+// Citizen
 router.post('/reports', citizenOnly, aiLimiter, validateBody(reports.createReportSchema), reports.createReport);
 router.get('/reports/mine', citizenOnly, reports.listMyReports);
 
-// --- Admin (command centre) ------------------------------------------------
+// Admin
 router.get('/incidents', adminOnly, incidents.list);
 router.get('/incidents/:id/nearest-units', adminOnly, incidents.nearestUnits);
 router.get('/units', adminOnly, units.listUnits);
