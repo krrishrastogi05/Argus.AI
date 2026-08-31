@@ -75,7 +75,7 @@ const LandingPage = () => {
               A unidirectional, event-driven architecture that transforms unstructured multimodal data into actionable intelligence for emergency response operations.
             </motion.p>
 
-            {/* CTA Buttons - RESTORED VIEW ARCHITECTURE BUTTON */}
+            {/* CTA Buttons */}
             <motion.div
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
@@ -336,8 +336,6 @@ const LandingPage = () => {
   );
 };
 
-// --- HELPER COMPONENTS (Internal to keep file count low) ---
-
 const TrustBadge = ({ icon, label }: any) => (
   <div className="flex items-center gap-2 text-muted-foreground">
     {icon}
@@ -381,7 +379,7 @@ const PhaseSection = ({ phase, title, description, children, delay, isLast = fal
 );
 
 const CardBase = ({ icon, title, desc, borderClass, bgClass, textClass, extra }: any) => (
-  <div className={`p-5 bg-card border border-border rounded-lg hover:${borderClass} transition-colors`}>
+  <div className={`p-5 bg-card border border-border rounded-lg ${borderClass} transition-colors`}>
     <div className="flex items-center gap-3 mb-3">
       <div className={`p-2 rounded-md ${bgClass} ${textClass}`}>{icon}</div>
       <span className="font-semibold text-foreground">{title}</span>
@@ -391,28 +389,27 @@ const CardBase = ({ icon, title, desc, borderClass, bgClass, textClass, extra }:
   </div>
 );
 
-// Specific Card Types with restored styling references
 const DataStreamCard = ({ icon, title, description }: any) => (
-  <CardBase icon={icon} title={title} desc={description} borderClass="border-primary/30" bgClass="bg-primary/10" textClass="text-primary" />
+  <CardBase icon={icon} title={title} desc={description} borderClass="hover:border-primary/30" bgClass="bg-primary/10" textClass="text-primary" />
 );
 
 const AnalysisCard = ({ icon, title, input, function: func }: any) => (
   <CardBase 
     icon={icon} title={title} extra={`Input: ${input}`} desc={func}
-    borderClass="border-accent/30" bgClass="bg-accent/10" textClass="text-accent" 
+    borderClass="hover:border-accent/30" bgClass="bg-accent/10" textClass="text-accent" 
   />
 );
 
 const FusionCard = ({ icon, title, description }: any) => (
-  <CardBase icon={icon} title={title} desc={description} borderClass="border-primary/30" bgClass="bg-primary/10" textClass="text-primary" />
+  <CardBase icon={icon} title={title} desc={description} borderClass="hover:border-primary/30" bgClass="bg-primary/10" textClass="text-primary" />
 );
 
 const DashboardCard = ({ icon, title, description }: any) => (
-  <CardBase icon={icon} title={title} desc={description} borderClass="border-emerald-success/30" bgClass="bg-emerald-success/10" textClass="text-emerald-success" />
+  <CardBase icon={icon} title={title} desc={description} borderClass="hover:border-emerald-success/30" bgClass="bg-emerald-success/10" textClass="text-emerald-success" />
 );
 
 const DeploymentCard = ({ icon, title, description }: any) => (
-  <CardBase icon={icon} title={title} desc={description} borderClass="border-alert-orange/30" bgClass="bg-alert-orange/10" textClass="text-alert-orange" />
+  <CardBase icon={icon} title={title} desc={description} borderClass="hover:border-alert-orange/30" bgClass="bg-alert-orange/10" textClass="text-alert-orange" />
 );
 
 export default LandingPage;

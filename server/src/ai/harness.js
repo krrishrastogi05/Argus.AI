@@ -1,14 +1,9 @@
-// A small harness around LLM calls. The model is treated like any other
-// unreliable network dependency:
+// Do not trust the model. Each call gets:
+//   timeout, retry with backoff (timeouts, 429, 5xx, network only),
+//   schema validation, a repair prompt with the error, and a rule-based fallback.
 //
-//   1. timeout      every call is aborted after `timeoutMs`
-//   2. retry        transient failures (timeouts, 429, 5xx, network) retry with backoff + jitter
-//   3. validate     output is parsed against the task's schema, never trusted as-is
-//   4. repair       if validation fails, the next attempt tells the model what was wrong
-//   5. fallback     when attempts run out, a deterministic rule-based answer is returned
-//
-// A task is a plain object: { name, buildRequest(input, feedback), parse(raw), fallback(input) }.
-// A provider is: { name, isConfigured(), generate(request, { signal }) -> Promise<string> }.
+// task:     { name, buildRequest(input, feedback), parse(raw), fallback(input) }
+// provider: { name, isConfigured(), generate(request, { signal }) -> Promise<string> }
 
 const { env } = require('../config/env');
 const geminiProvider = require('./geminiProvider');
@@ -24,7 +19,7 @@ class TimeoutError extends Error {
 function isRetryable(err) {
   if (err instanceof TimeoutError || err instanceof OutputValidationError) return true;
   if (typeof err.status === 'number') return err.status === 429 || err.status >= 500;
-  return true; // no HTTP status: network-level failure
+  return true; // no status: network error
 }
 
 function withTimeout(run, ms) {
@@ -54,7 +49,7 @@ async function runTask(task, input, options = {}) {
   let feedback = null;
   let lastError = new Error(`${provider.name} is not configured`);
 
-  // Recorded on the incident, so operators (and metrics) can see how each answer was produced.
+  // Kept on the incident, so operators see how the answer was made.
   const meta = (source, extra = {}) => ({
     task: task.name,
     source,

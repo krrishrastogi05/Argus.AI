@@ -1,5 +1,4 @@
-// An error that maps directly to an HTTP response. Anything else that reaches
-// the error handler is treated as an unexpected 500.
+// The error handler sends this status. Other errors become 500.
 class HttpError extends Error {
   constructor(status, message) {
     super(message);

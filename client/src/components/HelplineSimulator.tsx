@@ -16,9 +16,7 @@ export default function HelplineSimulator() {
       newRecorder.ondataavailable = (e) => chunks.push(e.data);
       newRecorder.onstop = async () => {
         stream.getTracks().forEach((track) => track.stop()); // release the microphone
-        // No browser has a native MP3 encoder - MediaRecorder actually records
-        // whatever it reports via .mimeType (webm/opus in Chrome & Firefox).
-        // Mislabeling it as audio/mp3 sent bytes Gemini couldn't parse.
+        // Browsers cannot record MP3. Send the real type (webm/opus), or Gemini cannot read it.
         const mimeType = (newRecorder.mimeType || "audio/webm").split(";")[0];
         const blob = new Blob(chunks, { type: mimeType });
         const file = new File([blob], "call.webm", { type: mimeType });
@@ -44,7 +42,6 @@ export default function HelplineSimulator() {
   const processCall = async (audioFile: File) => {
     setStatus("ANALYZING_VOICE");
     try {
-      // The server transcribes and analyses the audio; we only upload it.
       await api("/reports", {
         method: "POST",
         body: {

@@ -1,17 +1,13 @@
 const { HttpError } = require('./httpError');
 
-// Keyset ("cursor") pagination over (createdAt desc, _id desc).
-//
-// OFFSET pagination (skip N) makes the database walk and discard N documents,
-// so page 1000 is slow, and rows shift when new incidents arrive mid-scroll.
-// A cursor says "continue after this exact row": every page is one index seek,
-// and inserts at the head never cause duplicates or gaps.
+// Cursor pagination on (createdAt, _id), newest first.
+// skip(N) reads and discards N rows, and new rows move the pages.
+// A cursor continues after one exact row, with one index seek.
 
 function encodeCursor(doc) {
   return Buffer.from(`${doc.createdAt.toISOString()}|${doc._id}`).toString('base64url');
 }
 
-// Returns the filter that selects rows strictly after the cursor row.
 function afterCursor(cursor) {
   if (!cursor) return {};
 

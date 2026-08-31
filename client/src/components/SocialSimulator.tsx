@@ -21,14 +21,13 @@ export default function SocialSimulator() {
   const [error, setError] = useState('');
   const [advisories, setAdvisories] = useState<Advisory[]>([]);
   const [reports, setReports] = useState<Report[]>([]);
-  // One id per post: if the request is retried, the server returns the original
-  // report instead of creating a duplicate incident.
+  // One id per post. A retry with the same id makes no duplicate.
   const [requestId, setRequestId] = useState(() => crypto.randomUUID());
 
   useEffect(() => {
     const socket = getSocket();
 
-    // Snapshot on (re)connect, deltas in between: nothing is lost while offline.
+    // Full snapshot on each connect, so no event is lost offline.
     const loadSnapshot = () => {
       api<{ advisories: Advisory[] }>('/advisories').then((data) => setAdvisories(data.advisories)).catch(console.error);
       api<{ reports: Report[] }>('/reports/mine').then((data) => setReports(data.reports)).catch(console.error);

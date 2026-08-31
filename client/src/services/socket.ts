@@ -4,13 +4,12 @@ import { API_URL, getToken } from './api';
 
 let socket: Socket | null = null;
 
-// One authenticated connection per session. The server rejects the handshake
-// without a valid token and puts the socket in rooms based on the user's role.
+// One socket per session. The server refuses it without a valid token.
 export function getSocket(): Socket {
   if (!socket) {
     socket = io(API_URL, {
       transports: ['websocket'],
-      auth: (cb) => cb({ token: getToken() }), // re-read on every reconnect
+      auth: (cb) => cb({ token: getToken() }), // read again on each reconnect
     });
   }
   return socket;

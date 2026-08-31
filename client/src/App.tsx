@@ -12,7 +12,7 @@ const SocialSimulator = lazy(() => import("./components/SocialSimulator"));
 const HelplineSimulator = lazy(() => import("./components/HelplineSimulator"));
 const UnitManager = lazy(() => import("./components/UnitManager"));
 
-// What each role can open. The server enforces the same split; this only shapes the UI.
+// UI only. The server enforces the roles.
 const NAV: Record<Role, { to: string; icon: typeof Home; label: string }[]> = {
   admin: [
     { to: "/dashboard", icon: LayoutDashboard, label: "Command dashboard" },
@@ -44,7 +44,6 @@ function App() {
   const location = useLocation();
   const { user, loading, logout } = useAuth();
 
-  // Helper to style the navigation links based on active state
   const getNavLinkClass = ({ isActive }: { isActive: boolean }) =>
     `p-3 rounded-xl transition-all duration-200 ${
       isActive
@@ -67,7 +66,7 @@ function App() {
   return (
     <div className="flex h-screen w-screen overflow-hidden flex-col-reverse md:flex-row bg-slate-950">
 
-      {/* NAVIGATION SIDEBAR / BOTTOM BAR */}
+      {/* Side bar on desktop, bottom bar on mobile */}
       <nav className="w-full h-16 md:w-20 md:h-full bg-slate-900 border-t md:border-t-0 md:border-r border-slate-800 flex flex-row md:flex-col items-center justify-around md:justify-start py-0 md:py-6 gap-0 md:gap-4 z-50 shrink-0 shadow-2xl">
 
         <NavLink to="/" className={getNavLinkClass} aria-label="Home">
@@ -89,7 +88,6 @@ function App() {
         )}
       </nav>
 
-      {/* MAIN CONTENT AREA */}
       <main className="flex-1 relative overflow-hidden h-[calc(100vh-4rem)] md:h-screen w-full bg-slate-950">
         <Suspense fallback={<FullScreenLoader label="LOADING MODULE..." />}>
           <Routes>

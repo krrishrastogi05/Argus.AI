@@ -1,11 +1,7 @@
-// Every operation that changes more than one document runs in a transaction.
-//
-// Concurrency control is compare-and-set: each update filters on the state it
-// expects (`status: IDLE`, `status: PENDING`). If another operator changed the
-// document first, the filter matches nothing, we throw 409, and the transaction
-// rolls back every write made so far. Two dispatchers racing for the same
-// ambulance therefore get exactly one success and one clean conflict, never a
-// unit assigned to two incidents.
+// Each update filters on the state it expects (for example `status: IDLE`).
+// If another operator changed the document first, the filter finds nothing.
+// We then throw 409, and the transaction undoes all writes.
+// Result: one unit can never go to two incidents.
 
 const Advisory = require('../models/Advisory');
 const AuditLog = require('../models/AuditLog');
@@ -20,7 +16,7 @@ function audit(session, entry) {
   return AuditLog.create([entry], { session });
 }
 
-// Broadcast only after commit (see utils/transaction.js).
+// Call only after the commit.
 async function announce(incident, unit) {
   await incident.populate('assignedUnit');
   publish.incidentUpdated(incident);
@@ -42,7 +38,7 @@ async function dispatchUnit({ incidentId, unitId, actorId }) {
       { status: INCIDENT_STATUS.DISPATCHED, assignedUnit: unitId },
       { new: true, session },
     );
-    // Throwing here aborts the transaction, which also undoes the unit update above.
+    // This also undoes the unit update.
     if (!incident) throw new HttpError(409, 'Incident is not awaiting dispatch');
 
     await audit(session, { action: 'DISPATCH', actor: actorId, incident: incidentId, unit: unitId });
@@ -97,9 +93,7 @@ async function removeIncident({ incidentId, actorId }) {
   if (unit) publish.unitUpdated(unit);
 }
 
-// Trade-off: one transaction over whole collections is fine at demo scale;
-// transactions are capped (~60s, 16MB of changes), so a large system would
-// archive in batches instead.
+// ponytail: one transaction for all data. Limit is ~60s and 16MB; use batches at scale.
 async function resetSystem({ actorId }) {
   await inTransaction(async (session) => {
     await Incident.deleteMany({}, { session });

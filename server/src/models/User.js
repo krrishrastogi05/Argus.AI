@@ -11,7 +11,7 @@ const UserSchema = new mongoose.Schema(
   {
     name: { type: String, required: true, trim: true },
     email: { type: String, required: true, unique: true, lowercase: true, trim: true },
-    // "salt:hash", both hex. Never selected unless explicitly asked for.
+    // "salt:hash" in hex. Not returned unless selected.
     passwordHash: { type: String, required: true, select: false },
     role: { type: String, enum: Object.values(ROLES), default: ROLES.CITIZEN },
   },
@@ -26,7 +26,7 @@ const UserSchema = new mongoose.Schema(
   },
 );
 
-// scrypt is memory-hard and ships with Node, so no native bcrypt dependency.
+// scrypt is in Node, so bcrypt is not necessary.
 UserSchema.statics.hashPassword = async function hashPassword(password) {
   const salt = crypto.randomBytes(16).toString('hex');
   const hash = await scrypt(password, salt, KEY_LENGTH);

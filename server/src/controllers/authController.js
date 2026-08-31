@@ -20,7 +20,7 @@ function session(user) {
   return { token: signToken(user), user: { id: user.id, name: user.name, email: user.email, role: user.role } };
 }
 
-// Public sign-up always creates a citizen. Admins are provisioned by the seed script.
+// Sign-up always makes a citizen. Only the seed script makes admins.
 async function register(req, res) {
   const { name, email, password } = req.body;
 
@@ -41,7 +41,7 @@ async function register(req, res) {
 async function login(req, res) {
   const user = await User.findOne({ email: req.body.email.toLowerCase() }).select('+passwordHash');
 
-  // Same message for unknown email and wrong password: don't leak which emails exist.
+  // One message for both cases, so nobody can find which emails exist.
   if (!user || !(await user.verifyPassword(req.body.password))) {
     throw new HttpError(401, 'Invalid email or password');
   }

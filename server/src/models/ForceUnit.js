@@ -2,8 +2,7 @@ const mongoose = require('mongoose');
 
 const { UNIT_STATUS, UNIT_TYPES } = require('./enums');
 
-// Stored as GeoJSON ([lng, lat]) so MongoDB can index it; exposed to the
-// client as `coordinates: [lat, lng]` to match Leaflet.
+// GeoJSON is [lng, lat]. Leaflet is [lat, lng]. Swap only with toPoint/toLatLng.
 const PointSchema = new mongoose.Schema(
   {
     type: { type: String, enum: ['Point'], default: 'Point' },

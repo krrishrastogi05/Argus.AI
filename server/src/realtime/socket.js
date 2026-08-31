@@ -3,9 +3,7 @@ const { Server } = require('socket.io');
 const { verifyToken } = require('../middleware/auth');
 const { ROLES } = require('../models/enums');
 
-// Rooms decide who hears what:
-//   admins       every command-centre operator (incident + unit traffic)
-//   user:<id>    one citizen's own devices (status of *their* reports)
+// admins: all operators. user:<id>: the devices of one user.
 const ROOMS = {
   admins: 'admins',
   user: (userId) => `user:${userId}`,
@@ -16,12 +14,9 @@ let io = null;
 function attachRealtime(httpServer, { origins }) {
   io = new Server(httpServer, { cors: { origin: origins } });
 
-  // Scaling out: with more than one server instance, add @socket.io/redis-adapter
-  // here (io.adapter(createAdapter(pub, sub))) so room broadcasts reach sockets
-  // connected to other instances. Nothing else in this file changes.
+  // ponytail: one instance only. For more, add @socket.io/redis-adapter here.
 
-  // The handshake must carry a valid JWT; unauthenticated sockets never connect.
-  // Trade-off: the token is checked once per connection, not per event.
+  // ponytail: the token is checked at connect only, not on each event.
   io.use((socket, next) => {
     try {
       socket.data.user = verifyToken(socket.handshake.auth?.token);
@@ -44,9 +39,8 @@ const toAdmins = (event, payload) => io?.to(ROOMS.admins).emit(event, payload);
 const toUser = (userId, event, payload) => io?.to(ROOMS.user(String(userId))).emit(event, payload);
 const toEveryone = (event, payload) => io?.emit(event, payload);
 
-// Every event the server sends, in one place. Payloads are the single document
-// that changed (a delta), never a whole collection. Clients that miss events
-// (e.g. during a reconnect) re-fetch a REST snapshot on `connect`.
+// All server events. Each one sends only the changed document.
+// Clients get a full snapshot again on reconnect.
 const publish = {
   incidentCreated: (incident) => toAdmins('incident:created', incident),
   incidentUpdated: (incident) => toAdmins('incident:updated', incident),

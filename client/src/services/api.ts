@@ -2,7 +2,7 @@ export const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 
 const TOKEN_KEY = 'argus.token';
 
-// Storage can throw (private mode, blocked site data); auth then lasts for the tab only.
+// localStorage can throw in private mode. Then the session lasts for this tab only.
 let memoryToken: string | null = null;
 
 export function getToken(): string | null {
@@ -29,7 +29,7 @@ export class ApiError extends Error {
   }
 }
 
-// AuthProvider registers this so an expired session anywhere logs the user out.
+// AuthProvider sets this. An expired session on any screen signs the user out.
 let onUnauthorized: () => void = () => {};
 export function setUnauthorizedHandler(handler: () => void) {
   onUnauthorized = handler;

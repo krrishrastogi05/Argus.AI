@@ -1,12 +1,8 @@
 const mongoose = require('mongoose');
 
-// Runs `work(session)` as one ACID transaction: every write passed `session`
-// commits together or not at all.
-//
-// withTransaction retries the whole callback on transient errors (e.g. a write
-// conflict with a concurrent transaction), so `work` must only touch the
-// database. Side effects like socket broadcasts belong *after* this resolves,
-// otherwise clients could see a change that was later rolled back.
+// All writes that use `session` commit together, or none commit.
+// withTransaction can run `work` again after a write conflict. Do not send
+// socket events inside `work`; send them after the commit.
 async function inTransaction(work) {
   const session = await mongoose.startSession();
   try {

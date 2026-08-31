@@ -4,24 +4,22 @@ const { INCIDENT_STATUS, REPORT_CHANNELS } = require('./enums');
 
 const IncidentSchema = new mongoose.Schema(
   {
-    // --- Who reported it, and how ------------------------------------------
     reporter: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
     channel: { type: String, enum: REPORT_CHANNELS, required: true },
-    // Client-generated UUID per submission. Unique per reporter, so a retried
-    // request (flaky network, double tap) can never create a second incident.
+    // One UUID per post. A retry cannot make a second incident.
     clientRequestId: { type: String },
 
-    // --- What the AI (or the fallback rules) concluded ---------------------
+    // From the AI or the fallback rules.
     type: { type: String, required: true, trim: true },
     description: { type: String, required: true, trim: true },
     severity: { type: Number, required: true, min: 1, max: 10 },
     location: {
       address: { type: String, default: 'Unknown location' },
       coordinates: {
-        type: [Number], // [lat, lng] - what the map renders
+        type: [Number], // [lat, lng]
         validate: (value) => value.length === 2,
       },
-      // true when the AI could not place the report and we fell back to the city centre.
+      // true: no location found, the pin is the city centre.
       approximate: { type: Boolean, default: false },
     },
     breakdown: {
@@ -31,7 +29,6 @@ const IncidentSchema = new mongoose.Schema(
       logistics_needed: [String],
     },
     action_plan: String,
-    // Provenance from the AI harness: model vs fallback, attempts, latency.
     analysis: {
       source: { type: String, enum: ['model', 'fallback'] },
       provider: String,
@@ -40,7 +37,6 @@ const IncidentSchema = new mongoose.Schema(
       error: String,
     },
 
-    // --- Dispatch state -----------------------------------------------------
     status: {
       type: String,
       enum: Object.values(INCIDENT_STATUS),
@@ -51,17 +47,17 @@ const IncidentSchema = new mongoose.Schema(
   { timestamps: true },
 );
 
-// Dashboard query: "active incidents, newest first" (+ _id as the pagination tiebreaker).
+// Dashboard list. _id breaks ties for the cursor.
 IncidentSchema.index({ status: 1, createdAt: -1, _id: -1 });
-// Citizen query: "my reports, newest first".
+// "My reports".
 IncidentSchema.index({ reporter: 1, createdAt: -1 });
-// Idempotency key. Partial so legacy/seeded incidents without a key don't collide.
+// Partial: old incidents without a key do not collide.
 IncidentSchema.index(
   { reporter: 1, clientRequestId: 1 },
   { unique: true, partialFilterExpression: { clientRequestId: { $type: 'string' } } },
 );
 
-// What a citizen may see about their own report: no operator notes, no unit details.
+// A citizen does not see AI notes or unit data.
 IncidentSchema.methods.toCitizenView = function toCitizenView() {
   return {
     id: this.id,

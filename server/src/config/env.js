@@ -13,7 +13,7 @@ const env = {
   port: Number(process.env.PORT) || 3001,
   mongoUri: process.env.MONGO_URI || 'mongodb://127.0.0.1:27017/argus?replicaSet=rs0',
 
-  // Comma-separated list of allowed browser origins for REST and WebSocket.
+  // Comma-separated. Used for REST and WebSocket.
   clientOrigins: (process.env.CLIENT_ORIGIN || 'http://localhost:5173')
     .split(',')
     .map((origin) => origin.trim()),
@@ -25,7 +25,7 @@ const env = {
   geminiModel: process.env.GEMINI_MODEL || 'gemini-flash-latest',
   aiTimeoutMs: Number(process.env.AI_TIMEOUT_MS) || 15000,
 
-  // Map fallback when the AI cannot place an incident (New Delhi).
+  // New Delhi. Used when the AI finds no location.
   defaultCoordinates: [28.6139, 77.209],
 };
 

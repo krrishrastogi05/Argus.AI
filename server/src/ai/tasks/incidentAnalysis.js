@@ -33,7 +33,7 @@ const outputSchema = z.object({
       address: z.string().trim().min(1).max(200).optional(),
       coordinates: z.tuple([z.number().min(-90).max(90), z.number().min(-180).max(180)]).nullish(),
     })
-    .prefault({}), // prefault: parse {} so nested defaults apply
+    .prefault({}), // a missing object still gets its nested defaults
   breakdown: z
     .object({
       evidence_source: z.string().trim().max(60).optional(),
@@ -41,12 +41,11 @@ const outputSchema = z.object({
       visual_clues: z.array(z.string().trim()).default([]),
       logistics_needed: z.array(z.string().trim()).default([]),
     })
-    .prefault({}), // prefault: parse {} so nested defaults apply
+    .prefault({}),
   action_plan: z.string().trim().max(500).optional(),
 });
 
-// Shapes model or fallback output into Incident fields. A missing location is
-// placed at the city centre but flagged, so the dashboard never shows a guess as fact.
+// No location: put the pin at the city centre and set `approximate`.
 function toIncidentFields({ type, severity, description, location = {}, breakdown = {}, action_plan }) {
   const hasCoordinates = Array.isArray(location.coordinates);
   return {
@@ -91,8 +90,8 @@ function parse(raw) {
   return toIncidentFields(result.data);
 }
 
-// Deterministic keyword triage used when the model is unavailable. First match wins.
-// Trade-off: substring matching ("screenshot" hits "shot"); swap for a small classifier if false positives matter.
+// Used when the model is down. The first match wins.
+// ponytail: substring match, so "screenshot" finds "shot". Use a small classifier if this matters.
 const RULES = [
   { type: 'Fire', severity: 8, keywords: ['fire', 'smoke', 'flame', 'burning', 'blaze', 'explosion'] },
   { type: 'Violence', severity: 8, keywords: ['gun', 'shot', 'stab', 'riot', 'attack', 'fight', 'mob'] },

@@ -20,7 +20,7 @@ function errorHandler(err, req, res, next) {
     return res.status(400).json({ error: err.message });
   }
 
-  // body-parser errors (bad JSON, payload too large) carry their own status.
+  // Bad JSON or a body that is too large.
   if (err.type && err.status) {
     return res.status(err.status).json({ error: err.message });
   }

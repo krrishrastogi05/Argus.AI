@@ -9,12 +9,12 @@ import {
 } from 'lucide-react';
 import 'leaflet/dist/leaflet.css';
 import { api, ApiError } from '../services/api';
-import type { Incident, Unit } from '../types';
+import type { Incident, Unit, UnitType } from '../types';
 import SystemStatusSidebar from './SystemStatusSidebar';
 
 const CARTO_KEY = import.meta.env.VITE_CARTO_API_KEY;
+const DEFAULT_VIEW: [number, number] = [28.6139, 77.2090];
 
-// --- ICONS ---
 const incidentIcon = new L.DivIcon({
   className: "bg-transparent",
   html: `
@@ -39,13 +39,20 @@ const incidentIcon = new L.DivIcon({
   `,
   iconSize: [50, 50],
   iconAnchor: [25, 25],
-}) as any;
+});
 
-const policeIcon = new L.DivIcon({ className: 'bg-transparent', html: `<div style="background:#3b82f6; width:12px; height:12px; border-radius:50%; border:2px solid white; box-shadow: 0 0 10px #3b82f6;"></div>` }) as any;
-const fireIcon = new L.DivIcon({ className: 'bg-transparent', html: `<div style="background:#ef4444; width:12px; height:12px; border-radius:50%; border:2px solid white; box-shadow: 0 0 10px #ef4444;"></div>` }) as any;
-const medicalIcon = new L.DivIcon({ className: 'bg-transparent', html: `<div style="background:#22c55e; width:12px; height:12px; border-radius:50%; border:2px solid white; box-shadow: 0 0 10px #22c55e;"></div>` }) as any;
+const dot = (color: string) =>
+  new L.DivIcon({
+    className: 'bg-transparent',
+    html: `<div style="background:${color}; width:12px; height:12px; border-radius:50%; border:2px solid white; box-shadow: 0 0 10px ${color};"></div>`,
+  });
 
-// --- HELPERS ---
+const UNIT_ICONS: Record<UnitType, L.DivIcon> = {
+  POLICE: dot('#3b82f6'),
+  FIRE: dot('#ef4444'),
+  MEDICAL: dot('#22c55e'),
+};
+
 const isValidCoord = (coord: any) => Array.isArray(coord) && coord.length === 2 && coord[0] != null && coord[1] != null;
 
 function MapController({ center, zoom, shouldFly }: { center: [number, number] | null, zoom: number, shouldFly: boolean }) {
@@ -70,15 +77,11 @@ export default function SurveillanceDashboard() {
   const [shouldFly, setShouldFly] = useState(false);
   const [advisoryStatus, setAdvisoryStatus] = useState('');
   const [incomingAlert, setIncomingAlert] = useState<Incident | null>(null);
-  // Stays up (popup + flash) until the operator dismisses it - no auto-timeout.
+  // The alert stays until the operator closes it.
   const flash = !!incomingAlert && incomingAlert.severity > 7;
 
   const [isPanelOpen, setIsPanelOpen] = useState(false);
-  
-  
-  const DEFAULT_VIEW: [number, number] = [28.6139, 77.2090]; 
 
-  // --- RESET HANDLER --- (admin role is enforced by the server)
   const handleResetSystem = async () => {
     if (!confirm("Wipe all incidents and advisories, and set every unit to IDLE?")) return;
     try {
@@ -91,14 +94,16 @@ export default function SurveillanceDashboard() {
     }
   };
 
-  const handleResetView = () => {
-    setMapCenter(DEFAULT_VIEW);
-    setMapZoom(11);
+  const flyTo = (center: [number, number], zoom: number) => {
+    setMapCenter(center);
+    setMapZoom(zoom);
     setShouldFly(true);
     setTimeout(() => setShouldFly(false), 2500);
   };
 
-  // AI drafts, a human approves, then it is published to every citizen.
+  const handleResetView = () => flyTo(DEFAULT_VIEW, 11);
+
+  // The AI writes a draft. The operator approves it before all citizens get it.
   const handleBroadcastAdvisory = async () => {
     if (!selectedIncident) return;
     try {
@@ -118,7 +123,6 @@ export default function SurveillanceDashboard() {
     }
   };
 
-  // Nearest idle unit per type comes from one geo-indexed query on the server.
   const loadSuggestions = async (incident: Incident) => {
     setSuggestedUnits([]);
     if (incident.status !== 'PENDING') return;
@@ -130,11 +134,8 @@ export default function SurveillanceDashboard() {
     if (!isValidCoord(incident?.location?.coordinates)) return;
 
     setSelectedIncident(incident);
-    setMapCenter(incident.location.coordinates);
-    setMapZoom(16);
-    setShouldFly(true);
     setIsPanelOpen(true);
-    setTimeout(() => setShouldFly(false), 2500);
+    flyTo(incident.location.coordinates, 16);
     loadSuggestions(incident).catch(console.error);
   };
 
@@ -148,7 +149,7 @@ export default function SurveillanceDashboard() {
       setSelectedIncident(incident);
       setSuggestedUnits([]);
     } catch (err) {
-      // 409: another operator took this unit or incident first. Show fresh options.
+      // 409: another operator was first. Load the units again.
       if (err instanceof ApiError && err.status === 409) {
         alert(err.message);
         loadSuggestions(selectedIncident).catch(console.error);
@@ -181,8 +182,7 @@ export default function SurveillanceDashboard() {
   useEffect(() => {
     const socket = getSocket();
 
-    // Full snapshot on first load and on every (re)connect, so events missed
-    // while disconnected are never lost. Between snapshots, apply deltas.
+    // Get a full snapshot on each connect, so no event is lost offline.
     const loadSnapshot = async () => {
       const [incidentPage, unitList] = await Promise.all([
         api<{ items: Incident[] }>('/incidents?status=PENDING,DISPATCHED&limit=100'),
@@ -199,7 +199,7 @@ export default function SurveillanceDashboard() {
           ? prev.filter((inc) => inc._id !== incident._id)
           : [incident, ...prev.filter((inc) => inc._id !== incident._id)],
       );
-      // Keep the open panel in sync (e.g. dispatched from another operator's screen).
+      // Another operator can change the open incident.
       setSelectedIncident((prev) => (prev?._id === incident._id ? incident : prev));
     };
 
@@ -282,10 +282,8 @@ export default function SurveillanceDashboard() {
         </div>
       )}
       
-      {/* Sidebar: Passed literal true since map loads immediately */}
-      <SystemStatusSidebar isMapReady={true} />
-      
-      {/* MAP AREA */}
+      <SystemStatusSidebar />
+
       <div className="flex-1 relative h-full w-full">
         <MapContainer center={DEFAULT_VIEW} zoom={11} style={{ height: '100%', width: '100%' }} zoomControl={false}>
           <TileLayer url={`https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png${CARTO_KEY ? `?key=${CARTO_KEY}` : ''}`} attribution="© OpenStreetMap, © CARTO" />
@@ -321,7 +319,7 @@ export default function SurveillanceDashboard() {
               <Marker 
                   key={unit._id} 
                   position={unit.coordinates as [number, number]} 
-                  icon={unit.type === 'FIRE' ? fireIcon : unit.type === 'MEDICAL' ? medicalIcon : policeIcon}
+                  icon={UNIT_ICONS[unit.type]}
               >
                 <Popup><strong>{unit.name}</strong><br />{unit.type}</Popup>
               </Marker>
@@ -345,7 +343,6 @@ export default function SurveillanceDashboard() {
           </button>
         </div>
 
-        {/* RE-CENTER BUTTON */}
         <div className="absolute bottom-20 md:bottom-6 right-4 md:right-6 z-[1000]">
           <button onClick={handleResetView} className="bg-slate-900 hover:bg-slate-800 text-white p-3 rounded-full shadow-lg border border-slate-700 flex items-center gap-2 transition-transform hover:scale-105">
             <Maximize className="w-5 h-5" />
@@ -364,8 +361,7 @@ export default function SurveillanceDashboard() {
         ${isPanelOpen ? 'translate-y-0' : 'translate-y-full md:translate-y-0'}
       `}>
         
-        {/* Mobile Toggle Handle */}
-        <div 
+        <div
             className="md:hidden w-full bg-slate-800/50 h-8 flex items-center justify-center cursor-pointer border-b border-slate-800"
             onClick={() => setIsPanelOpen(!isPanelOpen)}
         >
@@ -424,7 +420,6 @@ export default function SurveillanceDashboard() {
                   {advisoryStatus === '' ? "BROADCAST ADVISORY" : advisoryStatus}
               </button>
 
-              {/* DETAILED BREAKDOWN */}
               {selectedIncident.breakdown && (
                 <div className="space-y-3">
                   <h4 className="text-xs font-bold text-cyan-500 border-b border-slate-800 pb-1 font-mono">AI EVIDENCE BREAKDOWN</h4>
@@ -447,7 +442,6 @@ export default function SurveillanceDashboard() {
                 </div>
               )}
 
-              {/* MANUAL DEPLOYMENT SECTION */}
               <div className="pt-2 border-t border-slate-800">
                  <h4 className="text-xs font-bold text-slate-500 flex items-center gap-2 mb-3"><Truck className="w-3 h-3"/> DEPLOYMENT STATUS</h4>
                  

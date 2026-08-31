@@ -26,7 +26,7 @@ async function list(req, res) {
   if (!parsed.success) throw new HttpError(400, 'Invalid query parameters');
   const { status, limit, cursor } = parsed.data;
 
-  // Fetch one extra row to learn whether another page exists without a COUNT.
+  // One extra row tells us if a next page exists. No COUNT is necessary.
   const rows = await Incident.find({ status: { $in: status }, ...afterCursor(cursor) })
     .sort(NEWEST_FIRST)
     .limit(limit + 1)
@@ -37,9 +37,7 @@ async function list(req, res) {
   res.json({ items, nextCursor: hasMore ? encodeCursor(items.at(-1)) : null });
 }
 
-// The closest idle unit of each type, in one indexed query. $geoNear uses the
-// 2dsphere index and returns units ordered by distance, so $first per type is
-// the nearest one. Replaces a client-side scan over every unit.
+// Nearest idle unit of each type. $geoNear sorts by distance, so $first is the nearest.
 async function nearestUnits(req, res) {
   const incident = await Incident.findById(req.params.id);
   if (!incident) throw new HttpError(404, 'Incident not found');

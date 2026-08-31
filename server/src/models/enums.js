@@ -1,4 +1,4 @@
-// Single source of truth for every status/type string stored in the database.
+// All status and type strings that go into the database.
 
 const ROLES = Object.freeze({
   CITIZEN: 'citizen',

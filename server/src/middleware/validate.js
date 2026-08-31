@@ -4,8 +4,7 @@ const { HttpError } = require('../utils/httpError');
 
 const objectId = z.string().regex(/^[a-f\d]{24}$/i, 'must be a valid id');
 
-// Validates and normalises req.body against a zod schema. Unknown keys are
-// stripped, so clients can't smuggle fields like `role` or `status` through.
+// zod removes unknown keys, so a client cannot send `role` or `status`.
 function validateBody(schema) {
   return (req, res, next) => {
     const result = schema.safeParse(req.body);

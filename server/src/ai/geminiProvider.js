@@ -9,7 +9,6 @@ function getModel() {
   return model;
 }
 
-// Translates the harness's provider-neutral request into a Gemini call.
 // request: { prompt: string, media?: { data: base64, mimeType }, json?: boolean }
 async function generate({ prompt, media, json }, { signal }) {
   const parts = [{ text: prompt }];
@@ -18,7 +17,7 @@ async function generate({ prompt, media, json }, { signal }) {
   const result = await getModel().generateContent(
     {
       contents: [{ role: 'user', parts }],
-      // JSON mode: the model returns bare JSON, no markdown fences to strip.
+      // JSON mode: no markdown fences in the reply.
       generationConfig: json ? { responseMimeType: 'application/json' } : undefined,
     },
     { signal },

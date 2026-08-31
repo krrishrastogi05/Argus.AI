@@ -1,4 +1,4 @@
-// Provisions accounts, demo units and indexes. Safe to re-run (idempotent upserts).
+// Makes the accounts, demo units and indexes. You can run it again safely.
 //   SEED_ADMIN_EMAIL / SEED_ADMIN_PASSWORD     required, the command-centre login
 //   SEED_CITIZEN_EMAIL / SEED_CITIZEN_PASSWORD optional demo citizen
 const mongoose = require('mongoose');
@@ -36,7 +36,7 @@ async function seed() {
 
   await connectDatabase();
 
-  // Build every declared index (unique, 2dsphere, compound) before traffic arrives.
+  // Build all indexes before the first request.
   await Promise.all(Object.values(mongoose.models).map((model) => model.syncIndexes()));
 
   console.log('Users:');

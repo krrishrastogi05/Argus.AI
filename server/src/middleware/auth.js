@@ -3,8 +3,7 @@ const jwt = require('jsonwebtoken');
 const { env } = require('../config/env');
 const { HttpError } = require('../utils/httpError');
 
-// Stateless auth: the token carries id + role, so any server instance can
-// verify a request without a shared session store.
+// The token holds the id and role. No session store is necessary.
 function signToken(user) {
   return jwt.sign({ sub: user.id, role: user.role, name: user.name }, env.jwtSecret, {
     expiresIn: env.jwtExpiresIn,
@@ -31,7 +30,7 @@ function requireAuth(req, res, next) {
   }
 }
 
-// RBAC gate. Must run after requireAuth.
+// Use after requireAuth.
 function requireRole(...roles) {
   return (req, res, next) => {
     if (!roles.includes(req.user.role)) {

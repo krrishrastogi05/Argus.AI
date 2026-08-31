@@ -7,7 +7,7 @@ const { env } = require('./src/config/env');
 const { attachRealtime } = require('./src/realtime/socket');
 
 async function start() {
-  // Fail fast: a server that boots without its database only produces 500s.
+  // Without the database, every request fails. Stop here.
   await connectDatabase();
 
   const server = http.createServer(app);
@@ -17,7 +17,7 @@ async function start() {
     console.log(`Server running on port ${env.port}`);
   });
 
-  // Render/Docker send SIGTERM on deploy: stop accepting work, then close the pool.
+  // Deploys send SIGTERM. Stop new work first, then close the pool.
   process.on('SIGTERM', () => {
     io.close();
     server.close(() => mongoose.disconnect().then(() => process.exit(0)));

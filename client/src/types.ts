@@ -40,7 +40,7 @@ export interface Incident {
   createdAt: string;
 }
 
-// The citizen-safe projection the server returns for a user's own reports.
+// What a citizen sees of their own report.
 export interface Report {
   id: string;
   channel: 'SOCIAL' | 'HELPLINE';

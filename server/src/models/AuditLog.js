@@ -1,8 +1,6 @@
 const mongoose = require('mongoose');
 
-// Append-only record of every state change an operator makes. Written inside
-// the same transaction as the change itself, so the log can never disagree
-// with the data (no "dispatched but not logged", no "logged but rolled back").
+// Written in the same transaction as the change, so the log always agrees with the data.
 const AuditLogSchema = new mongoose.Schema(
   {
     action: { type: String, enum: ['DISPATCH', 'RESOLVE', 'REMOVE', 'RESET'], required: true },

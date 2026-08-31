@@ -9,36 +9,42 @@ import {
 import L from "leaflet";
 import { getSocket } from "../services/socket";
 
-import { Flame, Stethoscope, Siren, Map as MapIcon } from "lucide-react"; // Removed unused 'Shield', 'Trash2'
+import { Flame, Stethoscope, Siren, Map as MapIcon } from "lucide-react";
 import "leaflet/dist/leaflet.css";
 import { api } from "../services/api";
 import type { Unit, UnitType } from "../types";
 
 const CARTO_KEY = import.meta.env.VITE_CARTO_API_KEY;
 
-const policeIcon = new L.DivIcon({
-  className: "bg-transparent",
-  html: `<div style="background:#3b82f6; width:16px; height:16px; border-radius:50%; border:2px solid white; box-shadow: 0 0 10px #3b82f6;"></div>`,
-});
-const fireIcon = new L.DivIcon({
-  className: "bg-transparent",
-  html: `<div style="background:#ef4444; width:16px; height:16px; border-radius:50%; border:2px solid white; box-shadow: 0 0 10px #ef4444;"></div>`,
-});
-const medicalIcon = new L.DivIcon({
-  className: "bg-transparent",
-  html: `<div style="background:#22c55e; width:16px; height:16px; border-radius:50%; border:2px solid white; box-shadow: 0 0 10px #22c55e;"></div>`,
-});
+const dot = (color: string) =>
+  new L.DivIcon({
+    className: "bg-transparent",
+    html: `<div style="background:${color}; width:16px; height:16px; border-radius:50%; border:2px solid white; box-shadow: 0 0 10px ${color};"></div>`,
+  });
+
+const UNIT_ICONS: Record<UnitType, L.DivIcon> = {
+  POLICE: dot("#3b82f6"),
+  FIRE: dot("#ef4444"),
+  MEDICAL: dot("#22c55e"),
+};
+
+const NAME_PREFIX: Record<UnitType, string> = { POLICE: "PCR", FIRE: "ENG", MEDICAL: "MED" };
+
+const TYPE_BUTTONS: { type: UnitType; label: string; Icon: typeof Siren; active: string }[] = [
+  { type: "POLICE", label: "POLICE", Icon: Siren, active: "bg-blue-900/40 border-blue-500 text-blue-400" },
+  { type: "FIRE", label: "FIRE", Icon: Flame, active: "bg-red-900/40 border-red-500 text-red-400" },
+  { type: "MEDICAL", label: "MEDIC", Icon: Stethoscope, active: "bg-green-900/40 border-green-500 text-green-400" },
+];
 
 
 
-// Fix: Added explicit type for Leaflet Mouse Event
 function ClickHandler({
   onMapClick,
 }: {
   onMapClick: (lat: number, lng: number) => void;
 }) {
   useMapEvents({
-    // wrap(): after panning across the date line Leaflet reports lng like -434; bring it into -180..180.
+    // Past the date line, Leaflet gives lng like -434. wrap() puts it back in -180..180.
     click: (e: L.LeafletMouseEvent) => {
       const { lat, lng } = e.latlng.wrap();
       onMapClick(lat, lng);
@@ -52,10 +58,7 @@ export default function UnitManager() {
   const [selectedType, setSelectedType] = useState<UnitType>("POLICE");
   const [unitName, setUnitName] = useState("");
 
-  const getNextName = (type: string, count: number) => {
-    const prefix = type === "POLICE" ? "PCR" : type === "FIRE" ? "ENG" : "MED";
-    return `${prefix}-${100 + count + 1}`;
-  };
+  const getNextName = (type: UnitType, count: number) => `${NAME_PREFIX[type]}-${101 + count}`;
 
   useEffect(() => {
     const socket = getSocket();
@@ -88,7 +91,6 @@ export default function UnitManager() {
   return (
     <div className="flex h-full bg-slate-950 text-slate-200">
       <div className="w-80 bg-slate-900 border-r border-slate-800 p-6 flex flex-col gap-6 shadow-2xl z-10">
-        {/* --- MODIFIED SIDEBAR HEADER --- */}
         <div className="border-b border-slate-800 pb-4">
           <h2 className="text-xl font-bold text-white flex items-center gap-2 mb-1">
             <MapIcon className="text-emerald-500" /> RESOURCE MGR
@@ -103,39 +105,18 @@ export default function UnitManager() {
             SELECT UNIT TYPE
           </label>
           <div className="grid grid-cols-3 gap-2">
-            <button
-              onClick={() => setSelectedType("POLICE")}
-              className={`p-3 rounded border flex flex-col items-center gap-1 transition ${
-                selectedType === "POLICE"
-                  ? "bg-blue-900/40 border-blue-500 text-blue-400"
-                  : "bg-slate-800 border-slate-700 text-slate-500"
-              }`}
-            >
-              <Siren className="w-5 h-5" />{" "}
-              <span className="text-[10px] font-bold">POLICE</span>
-            </button>
-            <button
-              onClick={() => setSelectedType("FIRE")}
-              className={`p-3 rounded border flex flex-col items-center gap-1 transition ${
-                selectedType === "FIRE"
-                  ? "bg-red-900/40 border-red-500 text-red-400"
-                  : "bg-slate-800 border-slate-700 text-slate-500"
-              }`}
-            >
-              <Flame className="w-5 h-5" />{" "}
-              <span className="text-[10px] font-bold">FIRE</span>
-            </button>
-            <button
-              onClick={() => setSelectedType("MEDICAL")}
-              className={`p-3 rounded border flex flex-col items-center gap-1 transition ${
-                selectedType === "MEDICAL"
-                  ? "bg-green-900/40 border-green-500 text-green-400"
-                  : "bg-slate-800 border-slate-700 text-slate-500"
-              }`}
-            >
-              <Stethoscope className="w-5 h-5" />{" "}
-              <span className="text-[10px] font-bold">MEDIC</span>
-            </button>
+            {TYPE_BUTTONS.map(({ type, label, Icon, active }) => (
+              <button
+                key={type}
+                onClick={() => setSelectedType(type)}
+                className={`p-3 rounded border flex flex-col items-center gap-1 transition ${
+                  selectedType === type ? active : "bg-slate-800 border-slate-700 text-slate-500"
+                }`}
+              >
+                <Icon className="w-5 h-5" />
+                <span className="text-[10px] font-bold">{label}</span>
+              </button>
+            ))}
           </div>
 
           <label className="text-xs font-bold text-slate-400 block">
@@ -176,13 +157,7 @@ export default function UnitManager() {
             <Marker
               key={unit._id}
               position={unit.coordinates}
-              icon={
-                unit.type === "FIRE"
-                  ? fireIcon
-                  : unit.type === "MEDICAL"
-                  ? medicalIcon
-                  : policeIcon
-              }
+              icon={UNIT_ICONS[unit.type]}
             >
               <Popup>
                 <strong className="text-slate-800">{unit.name}</strong>

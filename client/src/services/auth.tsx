@@ -33,7 +33,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(null);
   }, []);
 
-  // Restore the session on load; the server confirms the token is still valid.
+  // On load, ask the server if the stored token is still valid.
   useEffect(() => {
     setUnauthorizedHandler(logout);
     if (!getToken()) {
@@ -47,7 +47,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [logout]);
 
   const startSession = ({ token, user }: Session) => {
-    disconnectSocket(); // a fresh socket picks up the new token and role rooms
+    disconnectSocket(); // a new socket joins the rooms for the new role
     setToken(token);
     setUser(user);
     return user;

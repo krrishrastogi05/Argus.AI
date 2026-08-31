@@ -20,7 +20,7 @@ async function listAdvisories(req, res) {
   res.json({ advisories });
 }
 
-// Step 1 (admin): the AI drafts. Nothing is public yet - a human reviews first.
+// The AI writes a draft only. An operator must approve it.
 async function draftAdvisory(req, res) {
   const incident = await Incident.findById(req.body.incidentId);
   if (!incident) throw new HttpError(404, 'Incident not found');
@@ -29,7 +29,6 @@ async function draftAdvisory(req, res) {
   res.json({ text: output, source: meta.source });
 }
 
-// Step 2 (admin): publish the reviewed text to every connected user.
 async function publishAdvisory(req, res) {
   const advisory = await Advisory.create({
     message: req.body.message,

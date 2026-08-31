@@ -1,59 +1,34 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, ReactNode } from 'react';
 import { Server,  ShieldCheck, Wifi, Loader2, AlertCircle } from 'lucide-react';
 
 import { API_URL } from '../services/api';
 
-interface Props {
-  isMapReady: boolean;
-}
+type CheckState = 'loading' | 'success' | 'error';
 
-const SystemStatusSidebar: React.FC<Props> = ({ isMapReady }) => {
-  const [status, setStatus] = useState({
-    server: 'loading', // 'loading' | 'success' | 'error'
-    map: 'loading'
-  });
+const SystemStatusSidebar = () => {
+  const [server, setServer] = useState<CheckState>('loading');
   const [isVisible, setIsVisible] = useState(true);
 
   useEffect(() => {
-    const checkBackend = async () => {
-      try {
-        const res = await fetch(`${API_URL}/health`);
-        if (res.ok) {
-          // Add a small artificial delay so the user sees the "checking" animation
-          setTimeout(() => {
-            setStatus(prev => ({ ...prev, server: 'success' }));
-          }, 1200);
-        } else {
-          setStatus(prev => ({ ...prev, server: 'error' }));
-        }
-      } catch (err) {
-        setStatus(prev => ({ ...prev, server: 'error' }));
-      }
-    };
-    checkBackend();
+    fetch(`${API_URL}/health`)
+      .then((res) => {
+        // Short delay, so the user sees the check animation.
+        if (res.ok) setTimeout(() => setServer('success'), 1200);
+        else setServer('error');
+      })
+      .catch(() => setServer('error'));
   }, []);
 
   useEffect(() => {
-    if (isMapReady) {
-      setTimeout(() => {
-        setStatus(prev => ({ ...prev, map: 'success' }));
-      }, 500); // Small delay for visual sequencing
-    }
-  }, [isMapReady]);
-
-  // Auto-hide panel after both are ready
-  useEffect(() => {
-    if (status.server === 'success' && status.map === 'success') {
-      const timer = setTimeout(() => setIsVisible(false), 4000); 
-      return () => clearTimeout(timer);
-    }
-  }, [status]);
+    if (server !== 'success') return;
+    const timer = setTimeout(() => setIsVisible(false), 4000);
+    return () => clearTimeout(timer);
+  }, [server]);
 
   if (!isVisible) return null;
 
   return (
     <div className="absolute top-24 left-4 z-[9999] w-64 bg-slate-900/95 backdrop-blur-md border border-cyan-900/50 rounded-lg shadow-2xl p-4 overflow-hidden animate-in slide-in-from-left duration-500">
-      {/* Decorative scanning line */}
       <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-cyan-500 to-transparent opacity-50 animate-pulse" />
       
       <div className="flex justify-between items-center mb-4 border-b border-slate-800 pb-2">
@@ -70,21 +45,15 @@ const SystemStatusSidebar: React.FC<Props> = ({ isMapReady }) => {
         <StatusItem 
           icon={<Server size={16} />}
           label="BACKEND LINK"
-          subtext={status.server === 'loading' ? "Handshaking..." : status.server === 'success' ? "Online" : "Connection Failed"}
-          state={status.server}
+          subtext={server === 'loading' ? "Handshaking..." : server === 'success' ? "Online" : "Connection Failed"}
+          state={server}
         />
-        {/* <StatusItem 
-          icon={<MapIcon size={16} />}
-          label="GEOSPATIAL GRID"
-          subtext={status.map === 'loading' ? "Rendering tiles..." : "Calibrated"}
-          state={status.map}
-        /> */}
       </div>
     </div>
   );
 };
 
-const StatusItem = ({ icon, label, subtext, state }: any) => (
+const StatusItem = ({ icon, label, subtext, state }: { icon: ReactNode; label: string; subtext: string; state: CheckState }) => (
   <div className="flex items-start gap-3">
     <div className={`mt-1 p-1.5 rounded-md border ${
       state === 'success' ? 'bg-green-950 border-green-900 text-green-500' : 
