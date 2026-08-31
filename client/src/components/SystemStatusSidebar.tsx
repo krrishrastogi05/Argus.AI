@@ -10,13 +10,26 @@ const SystemStatusSidebar = () => {
   const [isVisible, setIsVisible] = useState(true);
 
   useEffect(() => {
-    fetch(`${API_URL}/health`)
-      .then((res) => {
-        // Short delay, so the user sees the check animation.
-        if (res.ok) setTimeout(() => setServer('success'), 1200);
-        else setServer('error');
-      })
-      .catch(() => setServer('error'));
+    // Render's free tier sleeps when idle. While it wakes (~1 min), requests fail.
+    // Try again for 60 s before the panel shows an error.
+    const MAX_ATTEMPTS = 20;
+    const RETRY_MS = 3000;
+    let cancelled = false;
+    let timer: ReturnType<typeof setTimeout>;
+
+    const check = async (attempt: number) => {
+      const ok = await fetch(`${API_URL}/health`).then((res) => res.ok, () => false);
+      if (cancelled) return;
+      if (ok) timer = setTimeout(() => setServer('success'), 1200); // short delay: the user sees the check
+      else if (attempt < MAX_ATTEMPTS) timer = setTimeout(() => check(attempt + 1), RETRY_MS);
+      else setServer('error');
+    };
+
+    check(1);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
   }, []);
 
   useEffect(() => {
