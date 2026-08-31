@@ -1,8 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Server,  ShieldCheck, Wifi, Loader2, AlertCircle } from 'lucide-react';
 
-// Use the same env var as your dashboard
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+import { API_URL } from '../services/api';
 
 interface Props {
   isMapReady: boolean;
@@ -18,8 +17,7 @@ const SystemStatusSidebar: React.FC<Props> = ({ isMapReady }) => {
   useEffect(() => {
     const checkBackend = async () => {
       try {
-        // Pinging your existing /api/data route as a health check
-        const res = await fetch(`${API_URL}/api/data`);
+        const res = await fetch(`${API_URL}/health`);
         if (res.ok) {
           // Add a small artificial delay so the user sees the "checking" animation
           setTimeout(() => {

@@ -5,16 +5,14 @@ import { getSocket } from "../services/socket";
 import { 
   Activity, Crosshair, MapPin, Eye, Volume2, Truck, 
   CheckCircle2, Trash2, Maximize, Flame, Stethoscope, 
-  Megaphone, Loader2, ChevronDown, Shield, Siren, X
+  Megaphone, Loader2, ChevronDown, Shield, Siren, X, AlertTriangle
 } from 'lucide-react';
 import 'leaflet/dist/leaflet.css';
-import { generateAdvisoryText } from '../services/gemini';
+import { api, ApiError } from '../services/api';
+import type { Incident, Unit } from '../types';
 import SystemStatusSidebar from './SystemStatusSidebar';
 
-// --- ENV VAR HANDLING ---
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 const CARTO_KEY = import.meta.env.VITE_CARTO_API_KEY;
-const socket = getSocket();
 
 // --- ICONS ---
 const incidentIcon = new L.DivIcon({
@@ -50,15 +48,6 @@ const medicalIcon = new L.DivIcon({ className: 'bg-transparent', html: `<div sty
 // --- HELPERS ---
 const isValidCoord = (coord: any) => Array.isArray(coord) && coord.length === 2 && coord[0] != null && coord[1] != null;
 
-function getDistanceKm(lat1: number, lon1: number, lat2: number, lon2: number) {
-  const R = 6371; 
-  const dLat = (lat2 - lat1) * (Math.PI / 180);
-  const dLon = (lon2 - lon1) * (Math.PI / 180);
-  const a = Math.sin(dLat/2) * Math.sin(dLat/2) + Math.cos(lat1 * (Math.PI/180)) * Math.cos(lat2 * (Math.PI/180)) * Math.sin(dLon/2) * Math.sin(dLon/2);
-  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-  return R * c;
-}
-
 function MapController({ center, zoom, shouldFly }: { center: [number, number] | null, zoom: number, shouldFly: boolean }) {
   const map = useMap();
   useEffect(() => {
@@ -71,51 +60,34 @@ function MapController({ center, zoom, shouldFly }: { center: [number, number] |
 }
 
 export default function SurveillanceDashboard() {
-  const [incidents, setIncidents] = useState<any[]>([]);
-  const [units, setUnits] = useState<any[]>([]);
-  const [selectedIncident, setSelectedIncident] = useState<any | null>(null);
-  const [suggestedUnits, setSuggestedUnits] = useState<any[]>([]);
+  const [incidents, setIncidents] = useState<Incident[]>([]);
+  const [units, setUnits] = useState<Unit[]>([]);
+  const [selectedIncident, setSelectedIncident] = useState<Incident | null>(null);
+  const [suggestedUnits, setSuggestedUnits] = useState<Unit[]>([]);
   
   const [mapCenter, setMapCenter] = useState<[number, number] | null>(null);
   const [mapZoom, setMapZoom] = useState(11);
   const [shouldFly, setShouldFly] = useState(false);
   const [advisoryStatus, setAdvisoryStatus] = useState('');
-  const [incomingAlert, setIncomingAlert] = useState<any | null>(null);
+  const [incomingAlert, setIncomingAlert] = useState<Incident | null>(null);
   // Stays up (popup + flash) until the operator dismisses it - no auto-timeout.
   const flash = !!incomingAlert && incomingAlert.severity > 7;
 
   const [isPanelOpen, setIsPanelOpen] = useState(false);
   
-  // Cleaned up: Removed isMapReady state as setIsMapReady was never used
   
   const DEFAULT_VIEW: [number, number] = [28.6139, 77.2090]; 
 
-  // --- RESET HANDLER ---
+  // --- RESET HANDLER --- (admin role is enforced by the server)
   const handleResetSystem = async () => {
-    const key = prompt("🔒 SECURITY PROTOCOL\nEnter Admin Key to confirm system wipe:");
-    
-    if (!key) return; 
-
+    if (!confirm("Wipe all incidents and advisories, and set every unit to IDLE?")) return;
     try {
-      const res = await fetch(`${API_URL}/api/clear`, { 
-        method: 'DELETE',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-admin-key': key 
-        }
-      });
-
-      if (res.ok) {
-        setSelectedIncident(null);
-        setIsPanelOpen(false);
-        handleResetView();
-        alert("✅ System Reset Successful");
-      } else {
-        alert("❌ ACCESS DENIED: Invalid Security Key");
-      }
+      await api('/admin/reset', { method: 'POST' });
+      setSelectedIncident(null);
+      setIsPanelOpen(false);
+      handleResetView();
     } catch (err) {
-      console.error(err);
-      alert("❌ Error connecting to server");
+      alert(err instanceof Error ? err.message : 'Reset failed');
     }
   };
 
@@ -126,97 +98,141 @@ export default function SurveillanceDashboard() {
     setTimeout(() => setShouldFly(false), 2500);
   };
 
+  // AI drafts, a human approves, then it is published to every citizen.
   const handleBroadcastAdvisory = async () => {
     if (!selectedIncident) return;
-    setAdvisoryStatus('GENERATING...');
-    const text = await generateAdvisoryText(selectedIncident);
-    setAdvisoryStatus('POSTING...');
-    await fetch(`${API_URL}/api/advisory`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: text })
-    });
-    setAdvisoryStatus('SENT');
-    setTimeout(() => setAdvisoryStatus(''), 2000);
+    try {
+      setAdvisoryStatus('GENERATING...');
+      const draft = await api<{ text: string }>('/advisories/draft', { method: 'POST', body: { incidentId: selectedIncident._id } });
+      if (!confirm(`Publish this advisory to all citizens?\n\n${draft.text}`)) {
+        setAdvisoryStatus('');
+        return;
+      }
+      setAdvisoryStatus('POSTING...');
+      await api('/advisories', { method: 'POST', body: { message: draft.text, incidentId: selectedIncident._id } });
+      setAdvisoryStatus('SENT');
+      setTimeout(() => setAdvisoryStatus(''), 2000);
+    } catch (err) {
+      setAdvisoryStatus('');
+      alert(err instanceof Error ? err.message : 'Advisory failed');
+    }
   };
 
-  const focusOnIncident = (incident: any) => {
+  // Nearest idle unit per type comes from one geo-indexed query on the server.
+  const loadSuggestions = async (incident: Incident) => {
+    setSuggestedUnits([]);
+    if (incident.status !== 'PENDING') return;
+    const { units } = await api<{ units: Unit[] }>(`/incidents/${incident._id}/nearest-units`);
+    setSuggestedUnits(units);
+  };
+
+  const focusOnIncident = (incident: Incident) => {
     if (!isValidCoord(incident?.location?.coordinates)) return;
 
     setSelectedIncident(incident);
     setMapCenter(incident.location.coordinates);
     setMapZoom(16);
     setShouldFly(true);
-    setIsPanelOpen(true); 
+    setIsPanelOpen(true);
     setTimeout(() => setShouldFly(false), 2500);
-    
-    if (incident.status !== 'DISPATCHED') {
-      const incidentCoords = incident.location.coordinates;
-      const idleUnits = units
-        .filter(u => u.status === 'IDLE' && isValidCoord(u.coordinates))
-        .map(u => ({
-          ...u,
-          distance: getDistanceKm(incidentCoords[0], incidentCoords[1], u.coordinates[0], u.coordinates[1])
-        }));
-
-      const bestPolice = idleUnits.filter(u => u.type === 'POLICE').sort((a, b) => a.distance - b.distance)[0];
-      const bestFire = idleUnits.filter(u => u.type === 'FIRE').sort((a, b) => a.distance - b.distance)[0];
-      const bestMedical = idleUnits.filter(u => u.type === 'MEDICAL').sort((a, b) => a.distance - b.distance)[0];
-
-      setSuggestedUnits([bestPolice, bestFire, bestMedical].filter(u => u !== undefined));
-    }
+    loadSuggestions(incident).catch(console.error);
   };
 
   const handleDeploy = async (unitId: string) => {
     if (!selectedIncident) return;
-    const res = await fetch(`${API_URL}/api/deploy`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ incidentId: selectedIncident._id, unitId })
-    });
-    const data = await res.json();
-    setSelectedIncident(data.incident);
-    setSuggestedUnits([]);
+    try {
+      const { incident } = await api<{ incident: Incident }>(`/incidents/${selectedIncident._id}/dispatch`, {
+        method: 'POST',
+        body: { unitId },
+      });
+      setSelectedIncident(incident);
+      setSuggestedUnits([]);
+    } catch (err) {
+      // 409: another operator took this unit or incident first. Show fresh options.
+      if (err instanceof ApiError && err.status === 409) {
+        alert(err.message);
+        loadSuggestions(selectedIncident).catch(console.error);
+      } else {
+        alert(err instanceof Error ? err.message : 'Dispatch failed');
+      }
+    }
+  };
+
+  const handleResolve = async () => {
+    if (!selectedIncident) return;
+    try {
+      await api(`/incidents/${selectedIncident._id}/resolve`, { method: 'POST' });
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Resolve failed');
+    }
   };
 
   const handleRemoveIncident = async () => {
     if (!selectedIncident) return;
     if (!confirm(`Remove this ${selectedIncident.type || 'incident'}?`)) return;
 
-    await fetch(`${API_URL}/api/incident/${selectedIncident._id}`, { method: 'DELETE' });
-    setSelectedIncident(null);
-    setSuggestedUnits([]);
-    setIsPanelOpen(false);
+    try {
+      await api(`/incidents/${selectedIncident._id}`, { method: 'DELETE' });
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Remove failed');
+    }
   };
 
   useEffect(() => {
-    fetch(`${API_URL}/api/data`)
-      .then(res => res.json())
-      .then(data => {
-        setIncidents(data.incidents);
-        setUnits(data.units);
-      });
+    const socket = getSocket();
 
-    socket.on("incident_alert", (data) => {
-      setIncidents(data.incidents);
-      setUnits(data.units);
+    // Full snapshot on first load and on every (re)connect, so events missed
+    // while disconnected are never lost. Between snapshots, apply deltas.
+    const loadSnapshot = async () => {
+      const [incidentPage, unitList] = await Promise.all([
+        api<{ items: Incident[] }>('/incidents?status=PENDING,DISPATCHED&limit=100'),
+        api<{ units: Unit[] }>('/units'),
+      ]);
+      setIncidents(incidentPage.items);
+      setUnits(unitList.units);
+      setSelectedIncident((prev) => (prev ? incidentPage.items.find((inc) => inc._id === prev._id) || null : prev));
+    };
 
-      // Keep the open panel in sync (e.g. dispatched/removed from another tab)
-      // instead of showing a stale copy of the incident.
-      setSelectedIncident((prev: any) =>
-        prev ? data.incidents.find((inc: any) => inc._id === prev._id) || null : prev
+    const upsertIncident = (incident: Incident) => {
+      setIncidents((prev) =>
+        incident.status === 'RESOLVED'
+          ? prev.filter((inc) => inc._id !== incident._id)
+          : [incident, ...prev.filter((inc) => inc._id !== incident._id)],
       );
+      // Keep the open panel in sync (e.g. dispatched from another operator's screen).
+      setSelectedIncident((prev) => (prev?._id === incident._id ? incident : prev));
+    };
 
-      if (data.newIncident) {
-        setIncomingAlert(data.newIncident);
-      }
-    });
+    const onCreated = (incident: Incident) => {
+      upsertIncident(incident);
+      setIncomingAlert(incident);
+    };
 
-    socket.on("units_updated", setUnits);
+    const onRemoved = ({ id }: { id: string }) => {
+      setIncidents((prev) => prev.filter((inc) => inc._id !== id));
+      setSelectedIncident((prev) => (prev?._id === id ? null : prev));
+    };
+
+    const onUnitUpdated = (unit: Unit) =>
+      setUnits((prev) => [...prev.filter((u) => u._id !== unit._id), unit]);
+
+    const resync = () => loadSnapshot().catch(console.error);
+
+    resync();
+    socket.on('connect', resync);
+    socket.on('system:reset', resync);
+    socket.on('incident:created', onCreated);
+    socket.on('incident:updated', upsertIncident);
+    socket.on('incident:removed', onRemoved);
+    socket.on('unit:updated', onUnitUpdated);
 
     return () => {
-      socket.off("incident_alert");
-      socket.off("units_updated");
+      socket.off('connect', resync);
+      socket.off('system:reset', resync);
+      socket.off('incident:created', onCreated);
+      socket.off('incident:updated', upsertIncident);
+      socket.off('incident:removed', onRemoved);
+      socket.off('unit:updated', onUnitUpdated);
     };
   }, []);
 
@@ -289,7 +305,7 @@ export default function SurveillanceDashboard() {
                   <Polyline 
                       positions={[
                         inc.location.coordinates as [number, number], 
-                        inc.assignedUnit.coordinates as [number, number]
+                        inc.assignedUnit.coordinates
                       ]} 
                       pathOptions={{ color: '#0ea5e9', dashArray: '5, 8', weight: 2, opacity: 0.6 }} 
                   />
@@ -382,6 +398,9 @@ export default function SurveillanceDashboard() {
                 <h3 className="text-xl md:text-2xl font-bold text-white uppercase">{selectedIncident.type}</h3>
                 <div className="flex items-center gap-3 mt-1">
                    <span className={`text-xs px-2 py-0.5 rounded border font-mono ${selectedIncident.severity > 7 ? 'bg-red-900/50 text-red-400 border-red-800' : 'bg-yellow-900/50 text-yellow-400 border-yellow-800'}`}>SEVERITY: {selectedIncident.severity}/10</span>
+                   {selectedIncident.analysis?.source === 'fallback' && (
+                     <span className="text-[10px] px-2 py-0.5 rounded border font-mono bg-orange-950/50 text-orange-400 border-orange-800" title="AI was unavailable; classified by keyword rules">RULE-BASED TRIAGE</span>
+                   )}
                 </div>
               </div>
 
@@ -390,6 +409,9 @@ export default function SurveillanceDashboard() {
                 <div>
                   <div className="text-xs text-slate-500 font-mono">GEOLOCATION</div>
                   <div className="text-sm text-slate-200">{selectedIncident.location.address}</div>
+                  {selectedIncident.location.approximate && (
+                    <div className="mt-1 text-[10px] font-mono text-orange-400 flex items-center gap-1"><AlertTriangle className="w-3 h-3" /> LOCATION UNVERIFIED - PIN IS CITY CENTRE</div>
+                  )}
                 </div>
               </div>
               
@@ -410,16 +432,16 @@ export default function SurveillanceDashboard() {
                     <span className="text-slate-500 block mb-1">SOURCE:</span>
                     <p className="text-slate-300 bg-slate-800/50 p-2 rounded border-l-2 border-cyan-500 italic">"{selectedIncident.breakdown.evidence_source || "N/A"}"</p>
                   </div>
-                  {selectedIncident.breakdown.visual_clues?.length > 0 && (
+                  {!!selectedIncident.breakdown.visual_clues?.length && (
                     <div className="text-xs">
                        <span className="text-slate-500 flex items-center gap-1 mb-1"><Eye className="w-3 h-3"/> VISUAL:</span>
-                       <div className="flex flex-wrap gap-1">{selectedIncident.breakdown.visual_clues.map((c:string, i:number)=><span key={i} className="bg-slate-800 border border-slate-700 px-2 rounded-full">{c}</span>)}</div>
+                       <div className="flex flex-wrap gap-1">{selectedIncident.breakdown.visual_clues.map((c, i)=><span key={i} className="bg-slate-800 border border-slate-700 px-2 rounded-full">{c}</span>)}</div>
                     </div>
                   )}
-                  {selectedIncident.breakdown.acoustics?.length > 0 && (
+                  {!!selectedIncident.breakdown.acoustics?.length && (
                     <div className="text-xs">
                        <span className="text-slate-500 flex items-center gap-1 mb-1"><Volume2 className="w-3 h-3"/> AUDIO:</span>
-                       <div className="flex flex-wrap gap-1">{selectedIncident.breakdown.acoustics.map((s:string, i:number)=><span key={i} className="bg-slate-800 border border-slate-700 px-2 rounded-full">{s}</span>)}</div>
+                       <div className="flex flex-wrap gap-1">{selectedIncident.breakdown.acoustics.map((s, i)=><span key={i} className="bg-slate-800 border border-slate-700 px-2 rounded-full">{s}</span>)}</div>
                     </div>
                   )}
                 </div>
@@ -435,8 +457,11 @@ export default function SurveillanceDashboard() {
                        <span className="text-green-400 font-mono text-sm font-bold block">{selectedIncident.assignedUnit.name}</span>
                        <span className="text-[10px] text-green-600 font-mono">{selectedIncident.assignedUnit.type} UNIT</span>
                      </div>
-                     <div className="flex items-center gap-1 text-[10px] bg-green-500/20 text-green-400 px-2 py-0.5 rounded border border-green-500/50">
-                        <CheckCircle2 className="w-3 h-3"/> DISPATCHED
+                     <div className="flex flex-col items-end gap-2">
+                       <div className="flex items-center gap-1 text-[10px] bg-green-500/20 text-green-400 px-2 py-0.5 rounded border border-green-500/50">
+                          <CheckCircle2 className="w-3 h-3"/> DISPATCHED
+                       </div>
+                       <button onClick={handleResolve} className="text-[10px] bg-slate-800 text-slate-300 px-2 py-1 rounded border border-slate-600 hover:bg-green-800 hover:text-white transition font-bold">MARK RESOLVED</button>
                      </div>
                    </div>
                  ) : (
@@ -453,7 +478,7 @@ export default function SurveillanceDashboard() {
                                </div>
                                <div>
                                  <div className="text-xs font-bold text-white">{unit.name}</div>
-                                 <div className="text-[10px] text-slate-500">{unit.distance.toFixed(1)} km away</div>
+                                 <div className="text-[10px] text-slate-500">{unit.distanceKm} km away</div>
                                </div>
                             </div>
                             <button onClick={() => handleDeploy(unit._id)} className="text-[10px] bg-cyan-900 text-cyan-400 px-3 py-1.5 rounded border border-cyan-700 hover:bg-cyan-600 hover:text-white transition font-bold">DEPLOY</button>

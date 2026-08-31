@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { processMediaOnClient, API_URL } from "../services/gemini"; // [FIXED: Import API_URL]
+import { api, fileToBase64 } from "../services/api";
 import { Mic, Radio } from "lucide-react";
 
 export default function HelplineSimulator() {
@@ -15,6 +15,7 @@ export default function HelplineSimulator() {
 
       newRecorder.ondataavailable = (e) => chunks.push(e.data);
       newRecorder.onstop = async () => {
+        stream.getTracks().forEach((track) => track.stop()); // release the microphone
         // No browser has a native MP3 encoder - MediaRecorder actually records
         // whatever it reports via .mimeType (webm/opus in Chrome & Firefox).
         // Mislabeling it as audio/mp3 sent bytes Gemini couldn't parse.
@@ -43,19 +44,14 @@ export default function HelplineSimulator() {
   const processCall = async (audioFile: File) => {
     setStatus("ANALYZING_VOICE");
     try {
-      const aiData = await processMediaOnClient(
-        "Urgent call. Extract location/severity.",
-        audioFile
-      );
-
-      // [FIXED: Use API_URL]
-      await fetch(`${API_URL}/api/incident`, {
+      // The server transcribes and analyses the audio; we only upload it.
+      await api("/reports", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          ...aiData,
-          description: "[VOICE CALL] " + aiData.description,
-        }),
+        body: {
+          channel: "HELPLINE",
+          media: { data: await fileToBase64(audioFile), mimeType: audioFile.type },
+          clientRequestId: crypto.randomUUID(),
+        },
       });
 
       setStatus("DISPATCHED");
@@ -105,7 +101,7 @@ export default function HelplineSimulator() {
           )}
           {status === "DISPATCHED" && (
             <span className="text-green-400 font-bold">
-              INCIDENT LOGGED & DISPATCHED
+              CALL LOGGED - COMMAND CENTRE NOTIFIED
             </span>
           )}
           {status === "MIC_ERROR" && (

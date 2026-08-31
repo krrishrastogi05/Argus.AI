@@ -11,11 +11,11 @@ import { getSocket } from "../services/socket";
 
 import { Flame, Stethoscope, Siren, Map as MapIcon } from "lucide-react"; // Removed unused 'Shield', 'Trash2'
 import "leaflet/dist/leaflet.css";
-import { API_URL } from "../services/gemini";
+import { api } from "../services/api";
+import type { Unit, UnitType } from "../types";
 
 const CARTO_KEY = import.meta.env.VITE_CARTO_API_KEY;
 
-// ... (Keep existing Icons: policeIcon, fireIcon, medicalIcon) ...
 const policeIcon = new L.DivIcon({
   className: "bg-transparent",
   html: `<div style="background:#3b82f6; width:16px; height:16px; border-radius:50%; border:2px solid white; box-shadow: 0 0 10px #3b82f6;"></div>`,
@@ -44,8 +44,8 @@ function ClickHandler({
 }
 
 export default function UnitManager() {
-  const [units, setUnits] = useState<any[]>([]);
-  const [selectedType, setSelectedType] = useState("POLICE");
+  const [units, setUnits] = useState<Unit[]>([]);
+  const [selectedType, setSelectedType] = useState<UnitType>("POLICE");
   const [unitName, setUnitName] = useState("");
 
   const getNextName = (type: string, count: number) => {
@@ -53,34 +53,32 @@ export default function UnitManager() {
     return `${prefix}-${100 + count + 1}`;
   };
 
- useEffect(() => {
-  const socket = getSocket();
+  useEffect(() => {
+    const socket = getSocket();
+    const load = () => api<{ units: Unit[] }>("/units").then((data) => setUnits(data.units)).catch(console.error);
+    const onUnitUpdated = (unit: Unit) => setUnits((prev) => [...prev.filter((u) => u._id !== unit._id), unit]);
 
-  fetch(`${API_URL}/api/data`)
-    .then(res => res.json())
-    .then(data => setUnits(data.units));
+    load();
+    socket.on("connect", load);
+    socket.on("system:reset", load);
+    socket.on("unit:updated", onUnitUpdated);
 
-  socket.on("units_updated", setUnits);
-
-  return () => {
-    socket.off("units_updated");
-  };
-}, []);
+    return () => {
+      socket.off("connect", load);
+      socket.off("system:reset", load);
+      socket.off("unit:updated", onUnitUpdated);
+    };
+  }, []);
 
 
   const handleAddUnit = async (lat: number, lng: number) => {
     const name = unitName || getNextName(selectedType, units.length);
-    await fetch(`${API_URL}/api/units`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        name,
-        type: selectedType,
-        coordinates: [lat, lng],
-        status: "IDLE",
-      }),
-    });
-    setUnitName("");
+    try {
+      await api("/units", { method: "POST", body: { name, type: selectedType, coordinates: [lat, lng] } });
+      setUnitName("");
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Could not add unit");
+    }
   };
 
   return (
